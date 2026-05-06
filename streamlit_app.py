@@ -1,6 +1,13 @@
+from google_auth_oauthlib.flow import InstalledAppFlow
+from google.auth.transport.requests import Request
+from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseUpload
+
+import os
+import pickle
+import io
 import streamlit as st
 import pandas as pd
-from pathlib import Path
 from datetime import datetime
 import csv
 
@@ -66,6 +73,7 @@ st.markdown("""
     margin-bottom: 25px;
     border: 1px solid #e5e7eb;
 }
+
 /* Section Header */
 .section-title {
     color: #003366;
@@ -151,7 +159,97 @@ except FileNotFoundError:
     st.stop()
 
 # -------------------------------------------------------
-# AUTHOR VERIFICATION CARD
+# GOOGLE DRIVE AUTHENTICATION
+# -------------------------------------------------------
+SCOPES = ['https://www.googleapis.com/auth/drive']
+
+creds = None
+
+if os.path.exists('token.pickle'):
+
+    with open('token.pickle', 'rb') as token:
+        creds = pickle.load(token)
+
+if not creds or not creds.valid:
+
+    if creds and creds.expired and creds.refresh_token:
+
+        creds.refresh(Request())
+
+    else:
+
+        flow = InstalledAppFlow.from_client_secrets_file(
+            'credentials.json',
+            SCOPES
+        )
+
+        creds = flow.run_local_server(port=0)
+
+    with open('token.pickle', 'wb') as token:
+        pickle.dump(creds, token)
+
+service = build('drive', 'v3', credentials=creds)
+
+ROOT_FOLDER_ID = "1j_S5h0ZhTvoTqoDLtZ62bEUuHK-547op"
+
+# -------------------------------------------------------
+# GOOGLE DRIVE UPLOAD FUNCTION
+# -------------------------------------------------------
+def upload_to_drive(file_data, filename, folder_id):
+
+    file_metadata = {
+        'name': filename,
+        'parents': [folder_id]
+    }
+
+    media = MediaIoBaseUpload(
+        io.BytesIO(file_data),
+        mimetype='application/octet-stream'
+    )
+
+    uploaded_file = service.files().create(
+        body=file_metadata,
+        media_body=media,
+        fields='id'
+    ).execute()
+
+    return uploaded_file.get('id')
+
+# -------------------------------------------------------
+# CREATE GOOGLE DRIVE FOLDER
+# -------------------------------------------------------
+def create_folder(folder_name, parent_id):
+
+    query = (
+        f"name='{folder_name}' and "
+        f"'{parent_id}' in parents and trashed=false"
+    )
+
+    results = service.files().list(
+        q=query,
+        fields='files(id, name)'
+    ).execute()
+
+    items = results.get('files', [])
+
+    if items:
+        return items[0]['id']
+
+    file_metadata = {
+        'name': folder_name,
+        'mimeType': 'application/vnd.google-apps.folder',
+        'parents': [parent_id]
+    }
+
+    folder = service.files().create(
+        body=file_metadata,
+        fields='id'
+    ).execute()
+
+    return folder.get('id')
+
+# -------------------------------------------------------
+# AUTHOR VERIFICATION
 # -------------------------------------------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
 
@@ -208,6 +306,7 @@ if submission_code and email:
 """, unsafe_allow_html=True)
 
     else:
+
         st.error(
             "❌ Invalid submission code or email."
         )
@@ -227,9 +326,6 @@ if verified:
 </div>
 """, unsafe_allow_html=True)
 
-    # -------------------------------------------------------
-    # FILE UPLOADERS
-    # -------------------------------------------------------
     final_manuscript = st.file_uploader(
         "1️⃣ Final Manuscript",
         type=["pdf", "docx", "tex"]
@@ -270,49 +366,65 @@ All three uploads are mandatory for final submission.
             st.error("Source files are required.")
             st.stop()
 
-        # -------------------------------------------------------
-        # CREATE DIRECTORIES
-        # -------------------------------------------------------
-        base_path = Path(f"submissions/{volume}")
-
-        final_path = base_path / "Final_Manuscript"
-        response_path = base_path / "Response_to_Reviewer"
-        source_path = base_path / "Source_Files"
-
-        final_path.mkdir(parents=True, exist_ok=True)
-        response_path.mkdir(parents=True, exist_ok=True)
-        source_path.mkdir(parents=True, exist_ok=True)
+        # Timestamp
+        timestamp = datetime.now().strftime(
+            "%Y-%m-%d %H:%M:%S"
+        )
 
         # -------------------------------------------------------
-        # SAVE FINAL MANUSCRIPT
+        # CREATE GOOGLE DRIVE FOLDERS
+        # -------------------------------------------------------
+        volume_folder_id = create_folder(
+            volume,
+            ROOT_FOLDER_ID
+        )
+
+        final_folder_id = create_folder(
+            "Final_Manuscript",
+            volume_folder_id
+        )
+
+        response_folder_id = create_folder(
+            "Response_to_Reviewer",
+            volume_folder_id
+        )
+
+        source_folder_id = create_folder(
+            "Source_Files",
+            volume_folder_id
+        )
+
+        # -------------------------------------------------------
+        # FILE NAMES
         # -------------------------------------------------------
         final_filename = (
             f"{submission_code}_final_{final_manuscript.name}"
         )
 
-        with open(
-            final_path / final_filename,
-            "wb"
-        ) as f:
-
-            f.write(final_manuscript.getbuffer())
-
-        # -------------------------------------------------------
-        # SAVE REVIEW RESPONSE
-        # -------------------------------------------------------
         response_filename = (
             f"{submission_code}_response_{review_response.name}"
         )
 
-        with open(
-            response_path / response_filename,
-            "wb"
-        ) as f:
-
-            f.write(review_response.getbuffer())
+        # -------------------------------------------------------
+        # UPLOAD FINAL MANUSCRIPT
+        # -------------------------------------------------------
+        upload_to_drive(
+            final_manuscript.getvalue(),
+            final_filename,
+            final_folder_id
+        )
 
         # -------------------------------------------------------
-        # SAVE SOURCE FILES
+        # UPLOAD REVIEW RESPONSE
+        # -------------------------------------------------------
+        upload_to_drive(
+            review_response.getvalue(),
+            response_filename,
+            response_folder_id
+        )
+
+        # -------------------------------------------------------
+        # UPLOAD SOURCE FILES
         # -------------------------------------------------------
         for uploaded_file in source_files:
 
@@ -320,25 +432,25 @@ All three uploads are mandatory for final submission.
                 f"{submission_code}_source_{uploaded_file.name}"
             )
 
-            with open(
-                source_path / source_filename,
-                "wb"
-            ) as f:
-
-                f.write(uploaded_file.getbuffer())
+            upload_to_drive(
+                uploaded_file.getvalue(),
+                source_filename,
+                source_folder_id
+            )
 
         # -------------------------------------------------------
         # SAVE METADATA
         # -------------------------------------------------------
-        metadata_file = Path(
-            "submissions/submission_metadata.csv"
-        )
+        metadata_file = "submission_metadata.csv"
 
-        file_exists = metadata_file.exists()
+        file_exists = False
 
-        timestamp = datetime.now().strftime(
-            "%Y-%m-%d %H:%M:%S"
-        )
+        try:
+            with open(metadata_file, "r"):
+                file_exists = True
+
+        except FileNotFoundError:
+            pass
 
         with open(
             metadata_file,
