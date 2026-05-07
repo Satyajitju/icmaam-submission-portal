@@ -161,56 +161,17 @@ except FileNotFoundError:
 # -------------------------------------------------------
 # GOOGLE DRIVE AUTHENTICATION
 # -------------------------------------------------------
+# -------------------------------------------------------
+
 SCOPES = ['https://www.googleapis.com/auth/drive']
+service_account_info = dict(st.secrets["gcp_service_account"])
 
-client_config = {
-    "web": {
-        "client_id": st.secrets["gcp_oauth"]["client_id"],
-        "client_secret": st.secrets["gcp_oauth"]["client_secret"],
-        "auth_uri": st.secrets["gcp_oauth"]["auth_uri"],
-        "token_uri": st.secrets["gcp_oauth"]["token_uri"],
-        "auth_provider_x509_cert_url": st.secrets["gcp_oauth"]["auth_provider_x509_cert_url"],
-        "redirect_uris": [
-            st.secrets["gcp_oauth"]["redirect_uri"]
-        ]
-    }
-}
+credentials = service_account.Credentials.from_service_account_info(
+    service_account_info,
+    scopes=SCOPES
+)
 
-creds = None
-
-if os.path.exists("token.pickle"):
-
-    with open("token.pickle", "rb") as token:
-        creds = pickle.load(token)
-
-if not creds or not creds.valid:
-
-    if creds and creds.expired and creds.refresh_token:
-
-        creds.refresh(Request())
-
-    else:
-
-        flow = InstalledAppFlow.from_client_config(
-            client_config,
-            SCOPES
-        )
-
-        auth_url, _ = flow.authorization_url(
-            prompt='consent'
-        )
-
-        st.markdown(f"""
-### Google Drive Authorization Required
-
-Please [click here]({auth_url}) to authorize Google Drive access.
-
-After authorization, restart the app.
-""")
-
-        st.stop()
-
-service = build('drive', 'v3', credentials=creds)
+service = build('drive', 'v3', credentials=credentials)
 
 ROOT_FOLDER_ID = "1j_S5h0ZhTvoTqoDLtZ62bEUuHK-547op"
 # -------------------------------------------------------
