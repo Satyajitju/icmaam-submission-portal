@@ -190,13 +190,21 @@ def upload_to_drive(file_data, filename, folder_id):
         mimetype='application/octet-stream'
     )
 
+    try:
+
     uploaded_file = service.files().create(
         body=file_metadata,
         media_body=media,
-        fields='id'
+        fields='id',
+        supportsAllDrives=True
     ).execute()
 
     return uploaded_file.get('id')
+
+except Exception as e:
+
+    st.error(f"Google Drive Upload Error: {str(e)}")
+    st.stop()
 
 # -------------------------------------------------------
 # CREATE GOOGLE DRIVE FOLDER
