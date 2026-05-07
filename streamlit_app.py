@@ -196,7 +196,19 @@ if not creds or not creds.valid:
             SCOPES
         )
 
-        creds = flow.run_local_server(port=0)
+        auth_url, _ = flow.authorization_url(
+    prompt='consent'
+)
+
+st.markdown(f"""
+### Google Drive Authorization Required
+
+Please [click here]({auth_url}) to authorize Google Drive access.
+
+After authorization, restart the app.
+""")
+
+st.stop()
 
     with open("token.pickle", "wb") as token:
         pickle.dump(creds, token)
