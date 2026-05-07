@@ -192,19 +192,19 @@ def upload_to_drive(file_data, filename, folder_id):
 
     try:
 
-    uploaded_file = service.files().create(
-        body=file_metadata,
-        media_body=media,
-        fields='id',
-        supportsAllDrives=True
-    ).execute()
+        uploaded_file = service.files().create(
+            body=file_metadata,
+            media_body=media,
+            fields='id',
+            supportsAllDrives=True
+        ).execute()
 
-    return uploaded_file.get('id')
+        return uploaded_file.get('id')
 
-except Exception as e:
+    except Exception as e:
 
-    st.error(f"Google Drive Upload Error: {str(e)}")
-    st.stop()
+        st.error(f"Google Drive Upload Error: {str(e)}")
+        st.stop()
 
 # -------------------------------------------------------
 # CREATE GOOGLE DRIVE FOLDER
