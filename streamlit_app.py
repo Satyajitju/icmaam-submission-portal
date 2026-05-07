@@ -1,12 +1,4 @@
-from google.oauth2 import service_account
-from google_auth_oauthlib.flow import InstalledAppFlow
-from google.auth.transport.requests import Request
-from googleapiclient.discovery import build
-from googleapiclient.http import MediaIoBaseUpload
-
-import os
-import pickle
-import io
+import dropbox
 import streamlit as st
 import pandas as pd
 from datetime import datetime
@@ -160,85 +152,44 @@ except FileNotFoundError:
     st.stop()
 
 # -------------------------------------------------------
-# GOOGLE DRIVE AUTHENTICATION
+# DROPBOX AUTHENTICATION
 # -------------------------------------------------------
-# -------------------------------------------------------
-
-SCOPES = ['https://www.googleapis.com/auth/drive']
-service_account_info = dict(st.secrets["gcp_service_account"])
-
-credentials = service_account.Credentials.from_service_account_info(
-    service_account_info,
-    scopes=SCOPES
+dbx = dropbox.Dropbox(
+    st.secrets["dropbox"]["access_token"]
 )
 
-service = build('drive', 'v3', credentials=credentials)
-
-ROOT_FOLDER_ID = "1j_S5h0ZhTvoTqoDLtZ62bEUuHK-547op"
 # -------------------------------------------------------
-# GOOGLE DRIVE UPLOAD FUNCTION
+# DROPBOX UPLOAD FUNCTION
 # -------------------------------------------------------
-def upload_to_drive(file_data, filename, folder_id):
-
-    file_metadata = {
-        'name': filename,
-        'parents': [folder_id]
-    }
-
-    media = MediaIoBaseUpload(
-        io.BytesIO(file_data),
-        mimetype='application/octet-stream'
-    )
+def upload_to_dropbox(file_data, filename, folder_path):
 
     try:
 
-        uploaded_file = service.files().create(
-            body=file_metadata,
-            media_body=media,
-            fields='id',
-            supportsAllDrives=True
-        ).execute()
+        full_path = f"{folder_path}/{filename}"
 
-        return uploaded_file.get('id')
+        dbx.files_upload(
+            file_data,
+            full_path,
+            mode=dropbox.files.WriteMode("overwrite")
+        )
 
     except Exception as e:
 
-        st.error(f"Google Drive Upload Error: {str(e)}")
+        st.error(f"Dropbox Upload Error: {str(e)}")
         st.stop()
 
 # -------------------------------------------------------
-# CREATE GOOGLE DRIVE FOLDER
+# CREATE DROPBOX FOLDER
 # -------------------------------------------------------
-def create_folder(folder_name, parent_id):
+def create_folder(folder_path):
 
-    query = (
-        f"name='{folder_name}' and "
-        f"'{parent_id}' in parents and trashed=false"
-    )
+    try:
 
-    results = service.files().list(
-        q=query,
-        fields='files(id, name)'
-    ).execute()
+        dbx.files_create_folder_v2(folder_path)
 
-    items = results.get('files', [])
+    except Exception:
 
-    if items:
-        return items[0]['id']
-
-    file_metadata = {
-        'name': folder_name,
-        'mimeType': 'application/vnd.google-apps.folder',
-        'parents': [parent_id]
-    }
-
-    folder = service.files().create(
-        body=file_metadata,
-        fields='id',
-        supportsAllDrives=True
-    ).execute()
-
-    return folder.get('id')
+        pass
 
 # -------------------------------------------------------
 # AUTHOR VERIFICATION
@@ -364,27 +315,26 @@ All three uploads are mandatory for final submission.
         )
 
         # -------------------------------------------------------
-        # CREATE GOOGLE DRIVE FOLDERS
+        # CREATE DROPBOX FOLDERS
         # -------------------------------------------------------
-        volume_folder_id = create_folder(
-            volume,
-            ROOT_FOLDER_ID
+        volume_folder = f"/ICMAAM_Submissions/{volume}"
+
+        final_folder = (
+            f"/ICMAAM_Submissions/{volume}/Final_Manuscript"
         )
 
-        final_folder_id = create_folder(
-            "Final_Manuscript",
-            volume_folder_id
+        response_folder = (
+            f"/ICMAAM_Submissions/{volume}/Response_to_Reviewer"
         )
 
-        response_folder_id = create_folder(
-            "Response_to_Reviewer",
-            volume_folder_id
+        source_folder = (
+            f"/ICMAAM_Submissions/{volume}/Source_Files"
         )
 
-        source_folder_id = create_folder(
-            "Source_Files",
-            volume_folder_id
-        )
+        create_folder(volume_folder)
+        create_folder(final_folder)
+        create_folder(response_folder)
+        create_folder(source_folder)
 
         # -------------------------------------------------------
         # FILE NAMES
@@ -400,19 +350,19 @@ All three uploads are mandatory for final submission.
         # -------------------------------------------------------
         # UPLOAD FINAL MANUSCRIPT
         # -------------------------------------------------------
-        upload_to_drive(
+        upload_to_dropbox(
             final_manuscript.getvalue(),
             final_filename,
-            final_folder_id
+            final_folder
         )
 
         # -------------------------------------------------------
         # UPLOAD REVIEW RESPONSE
         # -------------------------------------------------------
-        upload_to_drive(
+        upload_to_dropbox(
             review_response.getvalue(),
             response_filename,
-            response_folder_id
+            response_folder
         )
 
         # -------------------------------------------------------
@@ -424,10 +374,10 @@ All three uploads are mandatory for final submission.
                 f"{submission_code}_source_{uploaded_file.name}"
             )
 
-            upload_to_drive(
+            upload_to_dropbox(
                 uploaded_file.getvalue(),
                 source_filename,
-                source_folder_id
+                source_folder
             )
 
         # -------------------------------------------------------
