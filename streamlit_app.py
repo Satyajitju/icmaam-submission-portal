@@ -197,10 +197,10 @@ if not creds or not creds.valid:
         )
 
         auth_url, _ = flow.authorization_url(
-    prompt='consent'
-)
+            prompt='consent'
+        )
 
-st.markdown(f"""
+        st.markdown(f"""
 ### Google Drive Authorization Required
 
 Please [click here]({auth_url}) to authorize Google Drive access.
@@ -208,15 +208,11 @@ Please [click here]({auth_url}) to authorize Google Drive access.
 After authorization, restart the app.
 """)
 
-st.stop()
-
-    with open("token.pickle", "wb") as token:
-        pickle.dump(creds, token)
+        st.stop()
 
 service = build('drive', 'v3', credentials=creds)
 
 ROOT_FOLDER_ID = "1j_S5h0ZhTvoTqoDLtZ62bEUuHK-547op"
-
 # -------------------------------------------------------
 # GOOGLE DRIVE UPLOAD FUNCTION
 # -------------------------------------------------------
