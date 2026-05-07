@@ -226,7 +226,7 @@ def create_folder(folder_name, parent_id):
 
     folder = service.files().create(
         body=file_metadata,
-        fields='id'
+        fields='id',
         supportsAllDrives=True
     ).execute()
 
