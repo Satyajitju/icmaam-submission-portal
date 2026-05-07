@@ -175,7 +175,7 @@ def upload_to_dropbox(file_data, filename, folder_path):
 
     except Exception as e:
 
-        st.error(f"Dropbox Upload Error: {str(e)}")
+        st.error("❌ File upload failed. Please contact the organizing committee.")
         st.stop()
 
 # -------------------------------------------------------
